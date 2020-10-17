@@ -1,6 +1,6 @@
 use minifb::{Key, Window, WindowOptions};
 use std::collections::HashMap;
-use windows::media::capture::MediaCapture;
+use windows::media::capture::{LowLagPhotoCapture, MediaCapture};
 use windows::media::media_properties::{
     ImageEncodingProperties, MediaRatio, VideoEncodingProperties,
 };
@@ -26,7 +26,8 @@ async fn main() -> winrt::Result<()> {
     let cameras = find_cameras().await?;
     let bmp = create_image_encoding_properties(width as u32, height as u32)?;
     // HD Webcam -> Video-YUY2: 1280x720@10fps
-    let camera = start_camera(&cameras["HD Webcam"], "Video-YUY2: 1280x720@10fps").await?; //USB2.0 YW500 Camera, Lena3d
+    let camera = start_camera(&cameras["HD Webcam"], "Video-YUY2: 640x360@30fps").await?; //USB2.0 YW500 Camera, Lena3d
+    let capture = camera.prepare_low_lag_photo_capture_async(&bmp)?.await?;
 
     let mut buffer = vec![0_u32; width * height];
     let mut window = Window::new("Camera", width, height, WindowOptions::default())
@@ -36,7 +37,8 @@ async fn main() -> winrt::Result<()> {
     let mut image_counter: u32 = 0;
 
     while window.is_open() {
-        let frame = capture_frame(&camera, &bmp).await?;
+        // let frame = capture_frame(&capture, &bmp).await?;
+        let frame = capture_lowlag_frame(&capture).await?;
         fill_buffer(&mut buffer, &frame);
         let fps = fps_counter.count();
         window.set_title(&format!("Camera (FPS={:.1})", fps));
@@ -61,9 +63,8 @@ fn fill_buffer(buffer: &mut Vec<u32>, frame: &[u8]) {
         image::load_from_memory_with_format(frame, image::ImageFormat::Bmp).unwrap();
     let rgb_image = dynamic_image.as_rgb8().unwrap();
     for (pixel, cell) in rgb_image.pixels().zip(buffer.iter_mut()) {
-        if let [r, g, b] = pixel.0 {
-            *cell = u32::from_le_bytes([b, g, r, 0]);
-        }
+        let [r, g, b] = pixel.0;
+        *cell = u32::from_le_bytes([b, g, r, 0]);
     }
 }
 
@@ -143,6 +144,23 @@ async fn capture_frame(
     let buffer = Buffer::create(stream.size()? as u32)?;
     let buffer = stream
         .read_async(buffer, stream.size()? as u32, InputStreamOptions::None)?
+        .await?;
+    // println!("{:?}", buffer.length());
+    let mut data = vec![0u8; buffer.length()? as usize];
+    let reader = DataReader::from_buffer(buffer)?;
+    reader.read_bytes(&mut data)?;
+    Ok(data)
+}
+
+async fn capture_lowlag_frame(capture: &LowLagPhotoCapture) -> winrt::Result<Vec<u8>> {
+    use windows::storage::streams::{Buffer, DataReader, InputStreamOptions};
+
+    let photo = capture.capture_async()?.await?;
+    let frame = photo.frame()?;
+
+    let buffer = Buffer::create(frame.size()? as u32)?;
+    let buffer = frame
+        .read_async(buffer, frame.size()? as u32, InputStreamOptions::None)?
         .await?;
     // println!("{:?}", buffer.length());
     let mut data = vec![0u8; buffer.length()? as usize];
