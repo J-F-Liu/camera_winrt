@@ -1,9 +1,10 @@
-use image::bmp::BmpDecoder;
-use minifb::{Key, KeyRepeat, Window, WindowOptions};
+use minifb::{Key, Window, WindowOptions};
 use std::collections::HashMap;
 use windows::media::capture::MediaCapture;
-use windows::media::media_properties::{ImageEncodingProperties, VideoEncodingProperties};
-use winrt::{import, HString};
+use windows::media::media_properties::{
+    ImageEncodingProperties, MediaRatio, VideoEncodingProperties,
+};
+use winrt::{import, ComInterface, HString};
 
 import!(
     dependencies
@@ -24,7 +25,8 @@ async fn main() -> winrt::Result<()> {
 
     let cameras = find_cameras().await?;
     let bmp = create_image_encoding_properties(width as u32, height as u32)?;
-    let camera = start_camera(&cameras["HD Webcam"], &bmp).await?; //USB2.0 YW500 Camera, Lena3d
+    // HD Webcam -> Video-YUY2: 1280x720@10fps
+    let camera = start_camera(&cameras["HD Webcam"], "Video-YUY2: 1280x720@10fps").await?; //USB2.0 YW500 Camera, Lena3d
 
     let mut buffer = vec![0_u32; width * height];
     let mut window = Window::new("Camera", width, height, WindowOptions::default())
@@ -75,6 +77,10 @@ fn create_image_encoding_properties(
     Ok(bmp)
 }
 
+fn compute_ratio(ratio: MediaRatio) -> winrt::Result<f32> {
+    Ok(ratio.numerator()? as f32 / ratio.denominator()? as f32)
+}
+
 async fn find_cameras() -> winrt::Result<HashMap<String, HString>> {
     use windows::devices::enumeration::{DeviceClass, DeviceInformation};
 
@@ -90,16 +96,33 @@ async fn find_cameras() -> winrt::Result<HashMap<String, HString>> {
     Ok(cameras)
 }
 
-async fn start_camera(
-    device_id: &HString,
-    encoding: &ImageEncodingProperties,
-) -> winrt::Result<MediaCapture> {
+async fn start_camera(device_id: &HString, encoding: &str) -> winrt::Result<MediaCapture> {
     use windows::media::capture::{MediaCaptureInitializationSettings, MediaStreamType};
 
     let camera = MediaCapture::new()?;
     let settings = MediaCaptureInitializationSettings::new()?;
     settings.set_video_device_id(device_id)?;
     camera.initialize_with_settings_async(settings)?.await?;
+
+    let mut encodings = HashMap::new();
+    let controller = camera.video_device_controller()?;
+    for prop in controller.get_available_media_stream_properties(MediaStreamType::VideoRecord)? {
+        let video_prop = prop.query::<VideoEncodingProperties>();
+        let name = format!(
+            "{}-{}: {}x{}@{}fps",
+            prop.r#type()?,
+            prop.subtype()?,
+            video_prop.width()?,
+            video_prop.height()?,
+            compute_ratio(video_prop.frame_rate()?)?
+        );
+        println!("{}", &name);
+        encodings.insert(name, prop);
+    }
+    controller
+        .set_media_stream_properties_async(MediaStreamType::VideoRecord, &encodings[encoding])?
+        .await?;
+
     Ok(camera)
 }
 
