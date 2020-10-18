@@ -17,8 +17,8 @@ impl FpsCounter {
 
     pub fn count(&mut self) -> f32 {
         self.counter += 1;
-        if self.counter == 10 {
-            self.fps = (self.counter as f32) / self.instant.elapsed().as_secs_f32();
+        self.fps = (self.counter as f32) / self.instant.elapsed().as_secs_f32();
+        if self.counter == 30 {
             self.counter = 0;
             self.instant = Instant::now();
         }

@@ -5,7 +5,6 @@ use std::collections::HashMap;
 use std::iter::FromIterator;
 use std::process::Command;
 use windows::media::capture::{LowLagPhotoCapture, MediaCapture};
-use windows::media::capture::{MediaCaptureInitializationSettings, MediaStreamType};
 use windows::media::media_properties::{
     ImageEncodingProperties, MediaRatio, VideoEncodingProperties,
 };
@@ -47,8 +46,8 @@ async fn main() -> winrt::Result<()> {
     let mut menu_ids = IdManager::new();
     create_menu(&mut window, &mut menu_ids, &cameras, &formats);
 
-    let mut fps_counter = fps_counter::FpsCounter::new();
     let mut image_counter: u32 = 0;
+    let mut fps_counter = fps_counter::FpsCounter::new();
 
     while window.is_open() {
         if let Some(item_id) = window.is_menu_pressed() {
@@ -56,15 +55,12 @@ async fn main() -> winrt::Result<()> {
             println!("{}", name);
             if cameras.contains_key(name) {
                 // media_capture.close()?;
-
+                // media_capture = MediaCapture::new()?;
                 // let settings = MediaCaptureInitializationSettings::new()?;
                 // settings.set_video_device_id(&cameras[name])?;
-
-                // media_capture = MediaCapture::new()?;
                 // media_capture
                 //     .initialize_with_settings_async(settings)?
                 //     .await?;
-                // std::thread::sleep(std::time::Duration::from_secs(3));
                 Command::new(excutable)
                     .arg(name)
                     .spawn()
@@ -174,6 +170,8 @@ async fn start_camera(
     cameras: &HashMap<String, HString>,
     camera_name: &str,
 ) -> winrt::Result<HashMap<String, VideoEncodingProperties>> {
+    use windows::media::capture::{MediaCaptureInitializationSettings, MediaStreamType};
+
     if cameras.contains_key(camera_name) {
         println!("Start camera: {}", camera_name);
         let device_id = &cameras[camera_name];
@@ -195,7 +193,7 @@ async fn start_camera(
             prop.subtype()?,
             video_prop.width()?,
             video_prop.height()?,
-            compute_ratio(video_prop.frame_rate()?)?
+            compute_ratio(video_prop.frame_rate()?)?.round()
         );
         // println!("{}", &name);
         formats.insert(name, video_prop);
