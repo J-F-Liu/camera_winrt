@@ -1,0 +1,1 @@
+Open cameras and capture photos using WinRT.

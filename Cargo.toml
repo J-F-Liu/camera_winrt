@@ -1,5 +1,5 @@
 [package]
-name = "capture"
+name = "camera"
 version = "0.1.0"
 authors = ["Junfeng Liu <china.liujunfeng@gmail.com>"]
 edition = "2018"
