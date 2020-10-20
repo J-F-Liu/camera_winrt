@@ -28,14 +28,14 @@ use id_manager::IdManager;
 async fn main() -> winrt::Result<()> {
     let args: Vec<String> = std::env::args().collect();
     let excutable = &args[0];
-    let camera_name = if args.len() > 1 { &args[1] } else { "" };
-
-    let (width, height) = (1280, 720);
-    let bmp = create_image_encoding_properties(width as u32, height as u32)?;
+    let camera_name = args.get(1).map(String::as_str).unwrap_or("");
+    let width = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(1280);
+    let height = args.get(3).and_then(|s| s.parse().ok()).unwrap_or(720);
 
     let cameras = find_cameras().await?;
     let camera = MediaCapture::new()?;
     let formats = start_camera(&camera, &cameras, camera_name).await?;
+    let bmp = create_image_encoding_properties(width as u32, height as u32)?;
     let capture = camera.prepare_low_lag_photo_capture_async(&bmp)?.await?;
 
     let mut buffer = vec![0_u32; width * height];
